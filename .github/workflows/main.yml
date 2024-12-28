@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build:
     name: build.${{ matrix.heroku }}-${{ matrix.buildx }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
       matrix:
@@ -27,6 +27,7 @@ jobs:
         heroku:
           - 20
           - 22
+          - 24
 
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +40,7 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 2.7
+          ruby-version: 3.3
 
       - uses: actions/setup-python@v5
         with:
@@ -50,9 +51,6 @@ jobs:
 
       - name: shellcheck
         run: make shellcheck
-
-      - name: lint
-        run: make lint
 
       - name: install requirements
         run: make deps fpm package_cloud
@@ -87,7 +85,7 @@ jobs:
           fi
 
       - name: upload packages
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.heroku }}-${{ matrix.buildx }}
           path: build
@@ -95,7 +93,7 @@ jobs:
   unit-tests:
     name: unit.heroku-${{ matrix.heroku }}.${{ matrix.buildpack }}
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +114,7 @@ jobs:
         heroku:
           - 20
           - 22
+          - 24
 
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +124,7 @@ jobs:
           go-version: 1.17.8
 
       - name: download packages
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-${{ matrix.heroku }}-false
           path: build

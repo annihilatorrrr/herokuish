@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 
-if which systemctl > /dev/null; then
+if which systemctl >/dev/null; then
   echo "Starting docker"
   systemctl start docker
   sleep 5
 fi
 
 echo "Pruning dangling images"
-docker images -qf dangling=true | xargs docker rmi || true
+docker images -qf dangling=true | xargs --no-run-if-empty docker rmi
 
 echo "Pruning unused gliderlabs/herokuish images"
 docker images -a | grep "^gliderlabs\/herokuish" | grep -v latest | awk '{print $3}' | xargs -r docker rmi || true
 
 echo 'Importing herokuish into docker (around 5 minutes)'
 if [[ -n "$http_proxy" ]] || [[ -n "$https_proxy" ]]; then
-  echo "See the docker pull docs for proxy configuration";
+  echo "See the docker pull docs for proxy configuration"
 fi
 
 VERSION=$(cat /var/lib/herokuish/VERSION)
 
-sudo docker pull "gliderlabs/herokuish:v${VERSION}-22"
-sudo docker tag "gliderlabs/herokuish:v${VERSION}-22" gliderlabs/herokuish:latest-22
+sudo docker pull "gliderlabs/herokuish:v${VERSION}-24"
+sudo docker tag "gliderlabs/herokuish:v${VERSION}-24" gliderlabs/herokuish:latest-24

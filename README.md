@@ -2,13 +2,13 @@
 
 [![Build Status](https://github.com/gliderlabs/herokuish/workflows/CI/badge.svg)](https://github.com/gliderlabs/herokuish/actions?query=workflow%3ACI)
 [![IRC Channel](https://img.shields.io/badge/irc-%23gliderlabs-blue.svg)](https://kiwiirc.com/client/irc.freenode.net/#gliderlabs)
-[![Docker Hub](https://img.shields.io/badge/docker%20hub-v0.7.2-blue)](https://hub.docker.com/r/gliderlabs/herokuish)
+[![Docker Hub](https://img.shields.io/badge/docker%20hub-v0.10.3-blue)](https://hub.docker.com/r/gliderlabs/herokuish)
 
 A command line tool for emulating Heroku build and runtime tasks in containers.
 
 Herokuish is made for platform authors. The project consolidates and decouples Heroku compatibility logic (running buildpacks, parsing Procfile) and supporting workflow (importing/exporting slugs) from specific platform images like those in Dokku/Buildstep, Deis, Flynn, etc.
 
-The goal is to be the definitive, well maintained and heavily tested Heroku emulation utility shared by all. It is based on the [Heroku:20, and Heroku:22 system images](https://github.com/heroku/stack-images). Together they form a toolkit for achieving Heroku compatibility.
+The goal is to be the definitive, well maintained and heavily tested Heroku emulation utility shared by all. It is based on the [Heroku:20, Heroku:22, and Heroku:24 system images](https://github.com/heroku/stack-images). Together they form a toolkit for achieving Heroku compatibility.
 
 Herokuish is a community project and is in no way affiliated with Heroku.
 
@@ -19,8 +19,8 @@ Download and uncompress the latest binary tarball from [releases](https://github
 For example, you can do this directly in your Dockerfiles installing into `/bin` as one step:
 
 ```shell
-RUN curl --location --silent https://github.com/gliderlabs/herokuish/releases/download/v0.7.2/herokuish_0.7.2_linux_x86_64.tgz \
-		  | tar -xzC /bin
+RUN curl --location --silent https://github.com/gliderlabs/herokuish/releases/download/v0.10.3/herokuish_0.10.3_linux_x86_64.tgz \
+    | tar -xzC /bin
 ```
 
 Herokuish depends on Bash (4.0 or newer) and a handful of standard GNU utilties you probably have. It likely won't work on Busybox, though neither will any Heroku buildpacks.
@@ -60,7 +60,7 @@ For example, build processes that produce Docker images without producing interm
 `herokuish exec` will by default drop root privileges through use of [setuidgid](https://cr.yp.to/daemontools/setuidgid.html),
 but if already running as a non-root user setuidgid will fail, you can opt-out from this by setting the env-var `HEROKUISH_SETUIDGUID=false`.
 
-#### Buildpacks
+### Buildpacks
 
 Herokuish does not come with any buildpacks, but it is tested against recent versions of Heroku supported buildpacks. You can see this information with `herokuish version`. Example output:
 
@@ -78,7 +78,7 @@ buildpacks:
 
 You can install all supported buildpacks with `herokuish buildpack install`, or you can manually install buildpacks individually with `herokuish buildpack install <url> [committish]`. You can also mount a directory containing your platform's supported buildpacks (see Paths, next section), or you could bake your supported buildpacks into an image. These are the types of decisions that are up to you.
 
-#### Paths
+### Paths
 
 Use `herokuish paths` to see relevant system paths it uses. You can use these to import or mount data for use inside a container. They can also be overridden by setting the appropriate environment variable.
 
@@ -93,11 +93,11 @@ BUILDPACK_PATH=/tmp/buildpacks   # Path to installed buildpacks
 
 ```
 
-#### Entrypoints
+### Entrypoints
 
 Some subcommands are made to be used as default commands or entrypoint commands for containers. Specifically, herokuish detects if it was called as `/start`, `/exec`, or `/build` which will shortcut it to running those subcommands directly. This means you can either install the binary in those locations or create symlinks from those locations, allowing you to use them as your container entrypoint.
 
-#### Help
+### Help
 
 Don't be afraid of the help command. It actually tells you exactly what a command does:
 
@@ -128,10 +128,10 @@ Having trouble pushing an app to Dokku or Heroku? Use Herokuish with a local Doc
 instance to debug. This is especially helpful with Dokku to help determine if it's a buildpack
 issue or an issue with Dokku. Buildpack issues should be filed against Herokuish.
 
-#### Running an app against Herokuish
+### Running an app against Herokuish
 
 ```shell
-$ docker run --rm -v /abs/app/path:/tmp/app gliderlabs/herokuish /bin/herokuish test
+docker run --rm -v /abs/app/path:/tmp/app gliderlabs/herokuish /bin/herokuish test
 ```
 
 Mounting your local app source directory to `/tmp/app` and running `/bin/herokuish test` will run your app through the buildpack compile process. Then it starts your `web` process and attempts to connect to the web root path. If it runs into a problem, it should exit non-zero.
@@ -147,10 +147,10 @@ Mounting your local app source directory to `/tmp/app` and running `/bin/herokui
 
 You can use this output when you submit issues.
 
-#### Running an app tests using Heroku buildpacks
+### Running an app tests using Heroku buildpacks
 
 ```shell
-$ docker run --rm -v /abs/app/path:/tmp/app gliderlabs/herokuish /bin/herokuish buildpack test
+docker run --rm -v /abs/app/path:/tmp/app gliderlabs/herokuish /bin/herokuish buildpack test
 ```
 
 Mounting your local app source directory to `/tmp/app` and running `/bin/herokuish buildpack test` will run your app through the buildpack test-compile process. Then it will run `test` command to execute application tests.
@@ -170,12 +170,12 @@ Mounting your local app source directory to `/tmp/app` and running `/bin/herokui
 If you are on macOS, you'll want to explicitly set the platform:
 
 ```shell
-$ docker run --platform linux/amd64 --rm -v /abs/app/path:/tmp/app gliderlabs/herokuish /bin/herokuish buildpack test
+docker run --platform linux/amd64 --rm -v /abs/app/path:/tmp/app gliderlabs/herokuish /bin/herokuish buildpack test
 ```
 
 However, there is a risk of compatibility issues when running on a different platform than the one you are developing on. If you are getting strange compilation or segfaults, try running the build process on an x86 platform.
 
-#### Troubleshooting
+## Troubleshooting
 
 If you run into an issue and looking for more insight into what `herokuish` is doing, you can set the `$TRACE` environment variable.
 
