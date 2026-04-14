@@ -74,6 +74,9 @@ buildpack-detect() {
   declare desc="Detect suitable buildpack for an application"
   ensure-paths
   [[ "$USER" ]] || randomize-unprivileged
+  if [[ -n "$HEROKUISH_WITH_TTY" ]]; then
+    usermod -aG tty "$unprivileged_user" 2>/dev/null || true
+  fi
   buildpack-setup >/dev/null
   _select-buildpack
 }
@@ -82,6 +85,9 @@ buildpack-build() {
   declare desc="Build an application using installed buildpacks"
   ensure-paths
   [[ "$USER" ]] || randomize-unprivileged
+  if [[ -n "$HEROKUISH_WITH_TTY" ]]; then
+    usermod -aG tty "$unprivileged_user" 2>/dev/null || true
+  fi
   buildpack-setup >/dev/null
   buildpack-execute | indent
   procfile-types | indent
@@ -233,6 +239,9 @@ buildpack-test() {
   declare desc="Build and run tests for an application using installed buildpacks"
   ensure-paths
   [[ "$USER" ]] || randomize-unprivileged
+  if [[ -n "$HEROKUISH_WITH_TTY" ]]; then
+    usermod -aG tty "$unprivileged_user" 2>/dev/null || true
+  fi
   buildpack-setup >/dev/null
   _select-buildpack
 
