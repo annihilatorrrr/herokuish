@@ -37,6 +37,71 @@ T_envfile-parse() {
   fi
 }
 
+T_buildpack-install-invalid-url() {
+  # Regression test for gliderlabs/herokuish#553: a non-URL input like "ruby"
+  # must fail up-front with an actionable error instead of silently installing
+  # an empty buildpack directory.
+  # shellcheck disable=SC1091
+  source "$(dirname "${BASH_SOURCE[0]}")/../../include/buildpack.bash"
+
+  # Stub out ensure-paths and scope buildpack_path to a temp dir so the test
+  # does not touch /tmp/buildpacks or require the outer scope vars.
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  # shellcheck disable=SC2317
+  ensure-paths() { :; }
+  local buildpack_path="$tmpdir"
+  local output rc
+
+  output="$(buildpack-install "ruby" "" "custom" 2>&1)"
+  rc=$?
+  rm -rf "$tmpdir"
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "Expected non-zero exit code for invalid URL, got 0"
+    echo "output: $output"
+    return 1
+  fi
+
+  if [[ "$output" != *"Invalid buildpack URL: 'ruby'"* ]]; then
+    echo "Expected 'Invalid buildpack URL' message, got: $output"
+    return 2
+  fi
+}
+
+T_buildpack-install-unrecognised-archive() {
+  # An http(s) URL that is not a known archive extension and is not a reachable
+  # git remote should fail with an explicit "not a recognised archive" error
+  # rather than silently running tar with empty args.
+  # shellcheck disable=SC1091
+  source "$(dirname "${BASH_SOURCE[0]}")/../../include/buildpack.bash"
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  # shellcheck disable=SC2317
+  ensure-paths() { :; }
+  local buildpack_path="$tmpdir"
+  local output rc
+
+  # Use a reserved-for-documentation host so git ls-remote definitely fails
+  # and the tarball branch is reached without network access attempting real
+  # downloads.
+  output="$(buildpack-install "https://example.invalid/not-an-archive" "" "custom" 2>&1)"
+  rc=$?
+  rm -rf "$tmpdir"
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "Expected non-zero exit code for unrecognised archive URL, got 0"
+    echo "output: $output"
+    return 1
+  fi
+
+  if [[ "$output" != *"not a reachable git remote or a recognised archive"* ]]; then
+    echo "Expected 'not a reachable git remote or a recognised archive' message, got: $output"
+    return 2
+  fi
+}
+
 T_procfile-parse-valid() {
   # shellcheck disable=SC1091
   source "$(dirname "${BASH_SOURCE[0]}")/../../include/procfile.bash"
