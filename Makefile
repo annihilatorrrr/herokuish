@@ -144,7 +144,7 @@ bin/gh-release-body:
 	chmod +x bin/gh-release-body
 
 test:
-	bats tests/
+	bats tests/*/tests.bats
 
 ci-report:
 	docker version

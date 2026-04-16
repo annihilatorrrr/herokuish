@@ -82,7 +82,7 @@ jobs:
       - name: bash tests
         run: |
           if [[ "${{ matrix.buildx }}" == "false" ]]; then
-            bats tests/
+            bats tests/*/tests.bats
           fi
 
       - name: upload packages
@@ -144,4 +144,4 @@ jobs:
       - name: run buildpack test
         run: |
           echo "executing ${{ matrix.buildpack }} tests"
-          bats buildpacks/${{ matrix.buildpack }}/tests/
+          bats buildpacks/${{ matrix.buildpack }}/tests/*/test.bats
