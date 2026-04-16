@@ -93,3 +93,64 @@ T_buildpack-detect-fail() {
     herokuish buildpack detect 2>&1 | grep 'Unable to select a buildpack'
   "
 }
+
+# Regression tests for gliderlabs/herokuish#553: a failing custom buildpack
+# download must exit non-zero with an actionable error instead of stopping
+# silently. Each case points BUILDPACK_URL at a different class of bad input.
+
+T_buildpack-install-invalid-url() {
+  herokuish-test "buildpack-install-invalid-url" "
+    set +e
+    export BUILDPACK_URL=ruby
+    output=\$(herokuish buildpack install \"\$BUILDPACK_URL\" 2>&1)
+    rc=\$?
+    set -e
+    if [[ \"\$rc\" -eq 0 ]]; then
+      echo 'expected non-zero exit, got 0'
+      echo \"\$output\"
+      exit 1
+    fi
+    echo \"\$output\" | grep -q \"Invalid buildpack URL: 'ruby'\"
+  "
+}
+
+T_buildpack-install-bad-tarball-url() {
+  herokuish-test "buildpack-install-bad-tarball-url" "
+    set +e
+    export BUILDPACK_URL=https://example.invalid/does-not-exist.tar.gz
+    output=\$(herokuish buildpack install \"\$BUILDPACK_URL\" 2>&1)
+    rc=\$?
+    set -e
+    if [[ \"\$rc\" -eq 0 ]]; then
+      echo 'expected non-zero exit, got 0'
+      echo \"\$output\"
+      exit 1
+    fi
+    echo \"\$output\" | grep -q 'Failed to download buildpack'
+  "
+}
+
+T_buildpack-detect-bad-buildpack-url() {
+  herokuish-test "buildpack-detect-bad-buildpack-url" "
+    set +e
+    export buildpack_path=/tmp/buildpacks
+    export build_path=/tmp/app
+    export unprivileged_user=\$(whoami)
+    export unprivileged_group=\$(id -gn)
+    export BUILDPACK_URL=ruby
+
+    rm -rf \$buildpack_path && mkdir -p \$buildpack_path
+    mkdir -p \$build_path
+
+    output=\$(herokuish buildpack detect 2>&1)
+    rc=\$?
+    set -e
+    if [[ \"\$rc\" -eq 0 ]]; then
+      echo 'expected non-zero exit, got 0'
+      echo \"\$output\"
+      exit 1
+    fi
+    echo \"\$output\" | grep -q \"Invalid buildpack URL: 'ruby'\"
+    echo \"\$output\" | grep -q 'Unable to fetch custom buildpack from ruby'
+  "
+}

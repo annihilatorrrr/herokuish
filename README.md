@@ -214,6 +214,8 @@ docker run -e BUILDPACK_URL="https://github.com/custom/buildpack.git#with-a-bran
 
 Note that the underlying buildpacks will not trace their commands with `TRACE=true` is enabled. They need to independently set `set -x` in order to trace execution.
 
+`BUILDPACK_URL` must be a git remote (`https://`, `git://`, `ssh://`, `git@host:path`) or a tarball URL ending in `.tgz`, `.tar.gz`, `.tbz`, `.tar.bz`, or `.tar`. If the value is malformed or the download fails, herokuish now exits non-zero with a message such as `!     Invalid buildpack URL: 'ruby'` or `!     Failed to download buildpack from '<url>'` — previously this path could stop silently.
+
 ## Contributing
 
 Pull requests are welcome! Herokuish is written in Bash and Go. Please conform to the [Bash styleguide](https://github.com/progrium/bashstyle) used for this project when writing Bash.
