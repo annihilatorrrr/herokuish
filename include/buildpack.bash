@@ -21,6 +21,44 @@ _envfile-parse() {
   done <<<"$(cat)"
 }
 
+_run-with-stderr-bridge() {
+  declare desc="Run a command under the unprivileged user, bridging stderr via a FIFO when fd 2 is not a tty"
+  # When docker is run with -t, fd 2 is a pty and the unprivileged user
+  # (in group tty, via runuser) can re-open /dev/stderr. In that case just
+  # defer to unprivileged() and return.
+  if [[ -t 2 ]]; then
+    unprivileged "$@"
+    return
+  fi
+
+  # Without a tty, fd 2 is a pipe owned by root and the unprivileged user
+  # cannot re-open /dev/stderr -> /proc/self/fd/2. Point fd 2 at a FIFO the
+  # unprivileged user owns, and forward its contents to the real stderr via
+  # a root-side reader. Keep a parent-side writer open so the reader cannot
+  # hang if the child fails before opening the FIFO.
+  # env_path, unprivileged_user, unprivileged_group defined in outer scope
+  # shellcheck disable=SC2154
+  local fifo="$env_path/.herokuish.stderr.fifo"
+  rm -f "$fifo"
+  mkfifo -m 0600 "$fifo"
+  # shellcheck disable=SC2154
+  chown "$unprivileged_user:$unprivileged_group" "$fifo"
+
+  cat "$fifo" >&2 &
+  local bridge_pid=$!
+  exec 3>"$fifo"
+
+  local rc=0
+  # Single quotes are intentional: $1 and $@ expand in the inner shell.
+  # shellcheck disable=SC2016
+  unprivileged bash -c 'exec 2>"$1"; shift; exec "$@"' _ "$fifo" "$@" || rc=$?
+
+  exec 3>&-
+  wait "$bridge_pid" 2>/dev/null || true
+  rm -f "$fifo"
+  return "$rc"
+}
+
 _move-build-to-app() {
   shopt -s dotglob nullglob
   # shellcheck disable=SC2086
@@ -74,9 +112,6 @@ buildpack-detect() {
   declare desc="Detect suitable buildpack for an application"
   ensure-paths
   [[ "$USER" ]] || randomize-unprivileged
-  if [[ -n "$HEROKUISH_WITH_TTY" ]]; then
-    usermod -aG tty "$unprivileged_user" 2>/dev/null || true
-  fi
   buildpack-setup >/dev/null
   _select-buildpack
 }
@@ -85,9 +120,6 @@ buildpack-build() {
   declare desc="Build an application using installed buildpacks"
   ensure-paths
   [[ "$USER" ]] || randomize-unprivileged
-  if [[ -n "$HEROKUISH_WITH_TTY" ]]; then
-    usermod -aG tty "$unprivileged_user" 2>/dev/null || true
-  fi
   buildpack-setup >/dev/null
   buildpack-execute | indent
   procfile-types | indent
@@ -212,7 +244,7 @@ buildpack-setup() {
 buildpack-execute() {
   _select-buildpack
   cd "$build_path" || return 1
-  unprivileged "$selected_path/bin/compile" "$build_path" "$cache_path" "$env_path"
+  _run-with-stderr-bridge "$selected_path/bin/compile" "$build_path" "$cache_path" "$env_path"
   if [[ -f "$selected_path/bin/release" ]]; then
     unprivileged "$selected_path/bin/release" "$build_path" "$cache_path" | unprivileged tee "$build_path/.release" >/dev/null
   fi
@@ -239,9 +271,6 @@ buildpack-test() {
   declare desc="Build and run tests for an application using installed buildpacks"
   ensure-paths
   [[ "$USER" ]] || randomize-unprivileged
-  if [[ -n "$HEROKUISH_WITH_TTY" ]]; then
-    usermod -aG tty "$unprivileged_user" 2>/dev/null || true
-  fi
   buildpack-setup >/dev/null
   _select-buildpack
 
@@ -252,11 +281,11 @@ buildpack-test() {
 
   cd "$build_path" || return 1
   chmod 755 "$selected_path/bin/test-compile"
-  unprivileged "$selected_path/bin/test-compile" "$build_path" "$cache_path" "$env_path"
+  _run-with-stderr-bridge "$selected_path/bin/test-compile" "$build_path" "$cache_path" "$env_path"
 
   cd "$app_path" || return 1
   _move-build-to-app
   procfile-load-profile
   chmod 755 "$selected_path/bin/test"
-  unprivileged "$selected_path/bin/test" "$app_path" "$env_path"
+  _run-with-stderr-bridge "$selected_path/bin/test" "$app_path" "$env_path"
 }

@@ -13,6 +13,7 @@ addgroup --quiet --gid "32767" "herokuishuser" \
     --home "/app" \
     "herokuishuser"
 
-if [ -n "$HEROKUISH_WITH_TTY" ]; then
-  usermod -aG tty herokuishuser
-fi
+# tty group is needed when herokuish is run with `docker run -t`, so the
+# unprivileged user can open /dev/pts/N (root:tty, mode 220). Harmless on
+# runs without a tty.
+usermod -aG tty herokuishuser

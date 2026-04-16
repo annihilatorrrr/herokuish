@@ -59,7 +59,11 @@ indent() {
 }
 
 unprivileged() {
-  if [ -n "$HEROKUISH_WITH_TTY" ]; then
+  # When fd 2 is a tty (docker run -t), the unprivileged user must be in the
+  # `tty` group to re-open /dev/stderr -> /proc/self/fd/2 -> /dev/pts/N.
+  # setuidgid drops supplementary groups, so use runuser instead. When fd 2
+  # is a pipe, the tty group is irrelevant and setuidgid is cheaper.
+  if [[ -t 2 ]]; then
     runuser -u "$unprivileged_user" -- "$@"
   else
     setuidgid "$unprivileged_user" "$@"
@@ -88,9 +92,8 @@ randomize-unprivileged() {
     --home "$app_path" \
     "$username"
 
-  if [ -n "$HEROKUISH_WITH_TTY" ]; then
-    usermod -aG tty "$username"
-  fi
+  # Always add to tty group; see note in include/default_user.bash.
+  usermod -aG tty "$username"
 
   unprivileged_user="$username"
   unprivileged_group="$username"
