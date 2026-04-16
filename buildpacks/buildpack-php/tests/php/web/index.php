@@ -20,8 +20,8 @@ $app->add(TwigMiddleware::create($app, $twig));
 
 $app->get('/', function (Request $request, Response $response) use ($log) {
     $log->debug('logging output.');
-    $view = Twig::fromRequest($request);
-    return $view->render($response, 'index.twig');
+    $response->getBody()->write('php');
+    return $response;
 });
 
 $app->run();
