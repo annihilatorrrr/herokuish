@@ -126,7 +126,6 @@ clean:
 
 deps: bindata.go
 	docker pull heroku/heroku:24-build
-	cd / && go get -u github.com/progrium/basht/...
 	$(MAKE) bindata.go
 	go get || true
 
@@ -145,7 +144,7 @@ bin/gh-release-body:
 	chmod +x bin/gh-release-body
 
 test:
-	basht tests/*/tests.sh
+	bats tests/
 
 ci-report:
 	docker version
