@@ -216,6 +216,8 @@ Note that the underlying buildpacks will not trace their commands with `TRACE=tr
 
 `BUILDPACK_URL` must be a git remote (`https://`, `git://`, `ssh://`, `git@host:path`) or a tarball URL ending in `.tgz`, `.tar.gz`, `.tbz`, `.tar.bz`, or `.tar`. If the value is malformed or the download fails, herokuish now exits non-zero with a message such as `!     Invalid buildpack URL: 'ruby'` or `!     Failed to download buildpack from '<url>'` — previously this path could stop silently.
 
+If `BUILDPACK_URL` is not set and the app's build directory contains a `.buildpacks` file with exactly one entry, herokuish treats that entry as `BUILDPACK_URL`. This bypasses `heroku-buildpack-multi` (and its "Multiple default buildpacks reported" warning) when only one buildpack is declared, since there is no real ambiguity. A `.buildpacks` file with two or more entries still goes through `heroku-buildpack-multi` as before. An explicit `BUILDPACK_URL` always wins over the file.
+
 ## Contributing
 
 Pull requests are welcome! Herokuish is written in Bash and Go. Please conform to the [Bash styleguide](https://github.com/progrium/bashstyle) used for this project when writing Bash.

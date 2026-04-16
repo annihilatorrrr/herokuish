@@ -32,6 +32,29 @@ _move-build-to-app() {
 }
 
 _select-buildpack() {
+  # Issue #554: if .buildpacks declares exactly one buildpack, treat it as
+  # BUILDPACK_URL. Bypasses heroku-buildpack-multi (and its misleading
+  # "Multiple default buildpacks reported" warning) when the user has only
+  # declared a single buildpack — there is nothing "multi" about that case.
+  # A caller-provided BUILDPACK_URL always wins.
+  # shellcheck disable=SC2154
+  if [[ -z "$BUILDPACK_URL" ]] && [[ -f "$build_path/.buildpacks" ]]; then
+    local -a _dotbuildpacks_urls=()
+    local _dotbuildpacks_line
+    while IFS= read -r _dotbuildpacks_line || [[ -n "$_dotbuildpacks_line" ]]; do
+      _dotbuildpacks_line="${_dotbuildpacks_line%$'\r'}"
+      _dotbuildpacks_line="${_dotbuildpacks_line#"${_dotbuildpacks_line%%[![:space:]]*}"}"
+      _dotbuildpacks_line="${_dotbuildpacks_line%"${_dotbuildpacks_line##*[![:space:]]}"}"
+      [[ -z "$_dotbuildpacks_line" ]] && continue
+      [[ "${_dotbuildpacks_line:0:1}" == "#" ]] && continue
+      _dotbuildpacks_urls+=("$_dotbuildpacks_line")
+    done <"$build_path/.buildpacks"
+
+    if [[ "${#_dotbuildpacks_urls[@]}" -eq 1 ]]; then
+      BUILDPACK_URL="${_dotbuildpacks_urls[0]}"
+    fi
+  fi
+
   if [[ -n "$BUILDPACK_URL" ]]; then
     title "Fetching custom buildpack"
     # buildpack_path defined in outer scope

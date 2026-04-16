@@ -128,6 +128,87 @@ teardown_file() {
   "
 }
 
+# Regression test for gliderlabs/herokuish#554: when .buildpacks declares a
+# single buildpack, herokuish should route through the custom BUILDPACK_URL
+# path — skipping heroku-buildpack-multi and its "Multiple default buildpacks"
+# warning — because there is no real ambiguity.
+@test "buildpack-detect-single-url-in-dotbuildpacks" {
+  herokuish-test "buildpack-detect-single-url-in-dotbuildpacks" "
+    set -e
+    unset BUILDPACK_URL
+    export buildpack_path=/tmp/buildpacks
+    export build_path=/tmp/app
+    export unprivileged_user=\$(whoami)
+    export unprivileged_group=\$(id -gn)
+
+    rm -rf \$buildpack_path && mkdir -p \$buildpack_path
+    mkdir -p \$build_path
+
+    # Seed two default buildpacks: a realistic multi that only detects when
+    # .buildpacks exists, and a ruby stub that always detects. Under the old
+    # flow both would match and trigger the misleading 'Multiple default
+    # buildpacks' warning.
+    mkdir -p \$buildpack_path/00_buildpack-multi/bin
+    {
+      echo '#!/usr/bin/env bash'
+      echo '[[ -f \"\$1/.buildpacks\" ]] && { echo Multipack; exit 0; }'
+      echo 'exit 1'
+    } > \$buildpack_path/00_buildpack-multi/bin/detect
+    chmod +x \$buildpack_path/00_buildpack-multi/bin/detect
+
+    mkdir -p \$buildpack_path/01_buildpack-ruby/bin
+    {
+      echo '#!/usr/bin/env bash'
+      echo 'echo Ruby'
+    } > \$buildpack_path/01_buildpack-ruby/bin/detect
+    chmod +x \$buildpack_path/01_buildpack-ruby/bin/detect
+
+    # Build a local git repo to act as the single custom buildpack that
+    # .buildpacks points at. Using file:// avoids network dependencies and
+    # exercises the real buildpack-install git-clone path.
+    local_bp=/tmp/single-custom-buildpack
+    rm -rf \$local_bp
+    mkdir -p \$local_bp/bin
+    {
+      echo '#!/usr/bin/env bash'
+      echo 'echo SingleCustom'
+    } > \$local_bp/bin/detect
+    chmod +x \$local_bp/bin/detect
+    (
+      cd \$local_bp
+      git init -q
+      git config user.email t@t
+      git config user.name t
+      git add -A
+      git commit -q -m init
+    )
+
+    # Declare exactly one buildpack; should be treated like BUILDPACK_URL.
+    echo \"file://\$local_bp\" > \$build_path/.buildpacks
+
+    set +e
+    output=\$(herokuish buildpack detect 2>&1)
+    rc=\$?
+    set -e
+    if [[ \"\$rc\" -ne 0 ]]; then
+      echo 'expected exit 0, got' \"\$rc\"
+      echo \"\$output\"
+      exit 1
+    fi
+    if echo \"\$output\" | grep -q 'Multiple default buildpacks reported'; then
+      echo 'unexpected multi warning in output:'
+      echo \"\$output\"
+      exit 1
+    fi
+    if echo \"\$output\" | grep -q 'Multipack app detected'; then
+      echo 'unexpected Multipack selection in output:'
+      echo \"\$output\"
+      exit 1
+    fi
+    echo \"\$output\" | grep -q 'SingleCustom app detected'
+  "
+}
+
 @test "buildpack-detect-bad-buildpack-url" {
   herokuish-test "buildpack-detect-bad-buildpack-url" "
     set +e
