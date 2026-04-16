@@ -99,6 +99,203 @@
   }
 }
 
+# Helpers for the issue #554 _select-buildpack tests. Each test calls
+# _select-buildpack-setup first to source buildpack.bash, scope buildpack_path
+# and build_path to a tmpdir, stub outer-scope dependencies (title/indent/
+# chown/unprivileged/buildpack-install), and set up a capture file at
+# $_select_buildpack_install_args. The stubbed buildpack-install records its
+# args and fabricates $buildpack_path/custom/bin/detect so the post-install
+# detect step in _select-buildpack still produces a selected_name.
+_select-buildpack-setup() {
+  # shellcheck disable=SC1091
+  source "${BATS_TEST_DIRNAME}/../../include/buildpack.bash"
+  _select_buildpack_root="$(mktemp -d)"
+  # shellcheck disable=SC2034
+  buildpack_path="$_select_buildpack_root/buildpacks"
+  # shellcheck disable=SC2034
+  build_path="$_select_buildpack_root/build"
+  mkdir -p "$buildpack_path" "$build_path"
+  # shellcheck disable=SC2034
+  unprivileged_user="$(id -un)"
+  # shellcheck disable=SC2034
+  unprivileged_group="$(id -gn)"
+  _select_buildpack_install_args="$_select_buildpack_root/install-args"
+  : >"$_select_buildpack_install_args"
+  # shellcheck disable=SC2317
+  title() { echo "-----> $*"; }
+  # shellcheck disable=SC2317
+  indent() { sed -e 's/^/       /'; }
+  # shellcheck disable=SC2317
+  chown() { :; }
+  # shellcheck disable=SC2317
+  unprivileged() { command "$@"; }
+  # shellcheck disable=SC2317
+  buildpack-install() {
+    echo "$1|$2|$3" >>"$_select_buildpack_install_args"
+    mkdir -p "$buildpack_path/custom/bin"
+    cat >"$buildpack_path/custom/bin/detect" <<'DETECT'
+#!/usr/bin/env bash
+echo Custom
+DETECT
+    command chmod +x "$buildpack_path/custom/bin/detect"
+  }
+}
+
+@test "select-buildpack-single-url-in-dotbuildpacks-promoted-to-url" {
+  # Issue #554: a single URL in .buildpacks must be treated like BUILDPACK_URL.
+  _select-buildpack-setup
+  echo "https://github.com/heroku/heroku-buildpack-ruby" >"$build_path/.buildpacks"
+  unset BUILDPACK_URL
+
+  run _select-buildpack
+  local install_args
+  install_args="$(cat "$_select_buildpack_install_args")"
+  rm -rf "$_select_buildpack_root"
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected exit 0, got $status; output: $output"
+    return 1
+  }
+  [[ "$install_args" == "https://github.com/heroku/heroku-buildpack-ruby||custom" ]] || {
+    echo "expected buildpack-install to be called with the single URL, got: '$install_args'"
+    return 2
+  }
+  [[ "$output" != *"Multiple default buildpacks"* ]] || {
+    echo "expected no 'Multiple default buildpacks' warning, got: $output"
+    return 3
+  }
+  [[ "$output" == *"Fetching custom buildpack"* ]] || {
+    echo "expected 'Fetching custom buildpack' title, got: $output"
+    return 4
+  }
+}
+
+@test "select-buildpack-single-url-with-comments-and-blanks" {
+  # Comments and blank lines must be ignored when counting URLs.
+  _select-buildpack-setup
+  cat >"$build_path/.buildpacks" <<'EOF'
+# this is a comment
+
+  # indented comment
+   https://github.com/heroku/heroku-buildpack-ruby
+
+EOF
+  unset BUILDPACK_URL
+
+  run _select-buildpack
+  local install_args
+  install_args="$(cat "$_select_buildpack_install_args")"
+  rm -rf "$_select_buildpack_root"
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected exit 0, got $status; output: $output"
+    return 1
+  }
+  [[ "$install_args" == "https://github.com/heroku/heroku-buildpack-ruby||custom" ]] || {
+    echo "expected single trimmed URL, got: '$install_args'"
+    return 2
+  }
+  [[ "$output" != *"Multiple default buildpacks"* ]] || {
+    echo "expected no 'Multiple default buildpacks' warning, got: $output"
+    return 3
+  }
+}
+
+@test "select-buildpack-multiple-urls-uses-default-flow" {
+  # 2+ URLs in .buildpacks must fall through to the default (multi) flow,
+  # i.e. buildpack-install through the custom path must NOT be invoked.
+  _select-buildpack-setup
+  cat >"$build_path/.buildpacks" <<'EOF'
+https://github.com/heroku/heroku-buildpack-ruby
+https://github.com/heroku/heroku-buildpack-nodejs
+EOF
+  unset BUILDPACK_URL
+
+  # Seed a multi buildpack so the fallthrough path has something to detect.
+  mkdir -p "$buildpack_path/00_buildpack-multi/bin"
+  cat >"$buildpack_path/00_buildpack-multi/bin/detect" <<'EOF'
+#!/usr/bin/env bash
+echo Multipack
+EOF
+  command chmod +x "$buildpack_path/00_buildpack-multi/bin/detect"
+
+  run _select-buildpack
+  local install_args
+  install_args="$(cat "$_select_buildpack_install_args")"
+  rm -rf "$_select_buildpack_root"
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected exit 0, got $status; output: $output"
+    return 1
+  }
+  [[ -z "$install_args" ]] || {
+    echo "expected buildpack-install NOT to be called via URL path, got: '$install_args'"
+    return 2
+  }
+  [[ "$output" == *"Multipack app detected"* ]] || {
+    echo "expected 'Multipack app detected' via multi flow, got: $output"
+    return 3
+  }
+}
+
+@test "select-buildpack-buildpack-url-wins-over-dotbuildpacks" {
+  # Callers that pre-set BUILDPACK_URL must keep precedence over .buildpacks.
+  _select-buildpack-setup
+  echo "https://github.com/in-file" >"$build_path/.buildpacks"
+  export BUILDPACK_URL="https://github.com/from-env"
+
+  run _select-buildpack
+  local install_args
+  install_args="$(cat "$_select_buildpack_install_args")"
+  unset BUILDPACK_URL
+  rm -rf "$_select_buildpack_root"
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected exit 0, got $status; output: $output"
+    return 1
+  }
+  [[ "$install_args" == "https://github.com/from-env||custom" ]] || {
+    echo "expected BUILDPACK_URL value to be used, got: '$install_args'"
+    return 2
+  }
+}
+
+@test "select-buildpack-comment-only-dotbuildpacks-falls-through" {
+  # A .buildpacks file with zero real URLs must fall through to the default
+  # flow (same as "no file"), not hijack the custom path with an empty URL.
+  _select-buildpack-setup
+  cat >"$build_path/.buildpacks" <<'EOF'
+# only a comment
+
+EOF
+  unset BUILDPACK_URL
+
+  mkdir -p "$buildpack_path/00_buildpack-ruby/bin"
+  cat >"$buildpack_path/00_buildpack-ruby/bin/detect" <<'EOF'
+#!/usr/bin/env bash
+echo Ruby
+EOF
+  command chmod +x "$buildpack_path/00_buildpack-ruby/bin/detect"
+
+  run _select-buildpack
+  local install_args
+  install_args="$(cat "$_select_buildpack_install_args")"
+  rm -rf "$_select_buildpack_root"
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected exit 0, got $status; output: $output"
+    return 1
+  }
+  [[ -z "$install_args" ]] || {
+    echo "expected buildpack-install NOT to be called, got: '$install_args'"
+    return 2
+  }
+  [[ "$output" == *"Ruby app detected"* ]] || {
+    echo "expected 'Ruby app detected' via default flow, got: $output"
+    return 3
+  }
+}
+
 @test "procfile-parse-valid" {
   # shellcheck disable=SC1091
   source "${BATS_TEST_DIRNAME}/../../include/procfile.bash"
