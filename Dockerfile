@@ -18,12 +18,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 LABEL com.gliderlabs.herokuish/stack=$STACK
 
 USER root
-# for setuidgid
+# for setuidgid (daemontools) and optional /dev/random seeding (rng-tools5)
 COPY bin/apt-install /usr/local/bin/apt-install
-RUN apt-install daemontools
 COPY --from=builder /src/herokuish /bin/
 
-RUN apt-install daemontools && \
+RUN apt-install daemontools rng-tools5 && \
     /bin/herokuish buildpack install \
     && ln -s /bin/herokuish /build \
     && ln -s /bin/herokuish /start \
