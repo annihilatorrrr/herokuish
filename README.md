@@ -218,6 +218,16 @@ Note that the underlying buildpacks will not trace their commands with `TRACE=tr
 
 If `BUILDPACK_URL` is not set and the app's build directory contains a `.buildpacks` file with exactly one entry, herokuish treats that entry as `BUILDPACK_URL`. This bypasses `heroku-buildpack-multi` (and its "Multiple default buildpacks reported" warning) when only one buildpack is declared, since there is no real ambiguity. A `.buildpacks` file with two or more entries still goes through `heroku-buildpack-multi` as before. An explicit `BUILDPACK_URL` always wins over the file.
 
+### Entropy for `/dev/random`
+
+Workloads built on `libsodium` (used by `libzmq`, `pyzmq`, and transitively by Jupyter/`voila`) can hang on startup when the container's kernel entropy pool is not yet seeded. The runtime image ships with `rng-tools5` (which provides `rngd`) and will start it before `procfile-exec` hands off to the application when `HEROKUISH_ENTROPY=true` is set:
+
+```shell
+docker run --rm --cap-add=SYS_ADMIN -e HEROKUISH_ENTROPY=true gliderlabs/herokuish /start web
+```
+
+`rngd` needs `CAP_SYS_ADMIN` to inject entropy into `/dev/random`; without it the daemon either no-ops or logs a warning (`!     rngd failed to start`), and the application is still executed. The setting is off by default to preserve existing behavior — enable it only if you are seeing startup hangs caused by entropy starvation (see gliderlabs/herokuish#659).
+
 ## Contributing
 
 Pull requests are welcome! Herokuish is written in Bash and Go. Please conform to the [Bash styleguide](https://github.com/progrium/bashstyle) used for this project when writing Bash.

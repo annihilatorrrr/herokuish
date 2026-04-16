@@ -41,6 +41,16 @@ teardown_file() {
   herokuish-test "test-user" "$(fn-source _test-user)"
 }
 
+# rng-tools5 is shipped in the image so operators can opt into seeding
+# /dev/random via HEROKUISH_ENTROPY=true. See gliderlabs/herokuish#659.
+@test "rng-tools-installed" {
+  _test-rngd-present() {
+    # shellcheck disable=SC2317
+    command -v rngd
+  }
+  herokuish-test "test-rngd-present" "$(fn-source _test-rngd-present)"
+}
+
 @test "generate-slug" {
   herokuish-test "test-slug-generate" "
 		herokuish slug generate

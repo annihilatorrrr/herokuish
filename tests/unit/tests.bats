@@ -482,3 +482,115 @@ EOF
     return 1
   }
 }
+
+# procfile-ensure-entropy is the runtime hook that seeds /dev/random via rngd
+# when operators opt in with HEROKUISH_ENTROPY=true. See gliderlabs/herokuish#659.
+
+@test "procfile-ensure-entropy-default-off" {
+  # shellcheck disable=SC1091
+  source "${BATS_TEST_DIRNAME}/../../include/procfile.bash"
+  unset HEROKUISH_ENTROPY
+  export ENTROPY_TEST_MARKER
+  ENTROPY_TEST_MARKER="$(mktemp)"
+  # Fail loudly if the helper tries to call rngd when the flag is unset.
+  # shellcheck disable=SC2317
+  rngd() {
+    echo "rngd should not have been invoked" >"$ENTROPY_TEST_MARKER"
+    return 0
+  }
+  export -f rngd
+
+  run procfile-ensure-entropy
+  local marker="$ENTROPY_TEST_MARKER"
+  unset -f rngd
+  unset ENTROPY_TEST_MARKER
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected procfile-ensure-entropy to exit 0, got $status"
+    echo "output: $output"
+    rm -f "$marker"
+    return 1
+  }
+  if [[ -s "$marker" ]]; then
+    echo "procfile-ensure-entropy ran rngd without HEROKUISH_ENTROPY=true"
+    cat "$marker"
+    rm -f "$marker"
+    return 2
+  fi
+  rm -f "$marker"
+}
+
+@test "procfile-ensure-entropy-missing-rngd" {
+  # shellcheck disable=SC1091
+  source "${BATS_TEST_DIRNAME}/../../include/procfile.bash"
+  export HEROKUISH_ENTROPY=true
+  # Shadow `command` so the helper believes rngd is absent without depending
+  # on what's installed on the host.
+  # shellcheck disable=SC2317
+  command() {
+    if [[ "$1" == "-v" && "$2" == "rngd" ]]; then
+      return 1
+    fi
+    builtin command "$@"
+  }
+  export -f command
+
+  run procfile-ensure-entropy
+  unset -f command
+  unset HEROKUISH_ENTROPY
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected procfile-ensure-entropy to exit 0 when rngd is missing, got $status"
+    echo "output: $output"
+    return 1
+  }
+  [[ "$output" == *"rngd is not installed"* ]] || {
+    echo "expected warning about missing rngd, got: $output"
+    return 2
+  }
+}
+
+@test "procfile-ensure-entropy-opt-in" {
+  # shellcheck disable=SC1091
+  source "${BATS_TEST_DIRNAME}/../../include/procfile.bash"
+  export HEROKUISH_ENTROPY=true
+  export ENTROPY_TEST_MARKER
+  ENTROPY_TEST_MARKER="$(mktemp)"
+  # Stub pgrep so the helper believes rngd is not yet running, regardless of
+  # whether the host has any rngd running.
+  # shellcheck disable=SC2317
+  pgrep() { return 1; }
+  export -f pgrep
+  # Stub rngd so starting it is a cheap success that we can observe.
+  # Defining it as a function also satisfies `command -v rngd` without any
+  # further shadowing.
+  # shellcheck disable=SC2317
+  rngd() {
+    echo "started $*" >"$ENTROPY_TEST_MARKER"
+    return 0
+  }
+  export -f rngd
+
+  run procfile-ensure-entropy
+  local marker="$ENTROPY_TEST_MARKER"
+  unset -f pgrep rngd
+  unset HEROKUISH_ENTROPY ENTROPY_TEST_MARKER
+
+  [[ "$status" -eq 0 ]] || {
+    echo "expected procfile-ensure-entropy to exit 0, got $status"
+    echo "output: $output"
+    rm -f "$marker"
+    return 1
+  }
+  [[ -s "$marker" ]] || {
+    echo "procfile-ensure-entropy did not invoke rngd"
+    rm -f "$marker"
+    return 2
+  }
+  [[ "$(cat "$marker")" == "started -b" ]] || {
+    echo "expected rngd to be started with -b, got: $(cat "$marker")"
+    rm -f "$marker"
+    return 3
+  }
+  rm -f "$marker"
+}
