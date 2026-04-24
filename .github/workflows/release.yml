@@ -67,24 +67,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: set up qemu
-        uses: docker/setup-qemu-action@v4
-
-      - name: set up docker buildx
-        uses: docker/setup-buildx-action@v4
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.9.x"
-
-      - name: install docker-copyedit
-        run: pip install docker-copyedit
+      - name: install regctl
+        uses: regclient/actions/regctl-installer@main
 
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
 
       - name: retag images
-        env:
-          DOCKER_CLI_EXPERIMENTAL: enabled
         run: bin/retag ${{ steps.get_version.outputs.VERSION }}
