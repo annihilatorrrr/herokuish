@@ -58,6 +58,10 @@ build/docker:
 	$(MAKE) build/docker/24 STACK_VERSION=24
 
 build/docker/$(STACK_VERSION): bindata.go
+ifneq ($(OCI_OUTPUT),)
+	mkdir -p $(dir $(OCI_OUTPUT))
+	docker buildx build --no-cache --pull --progress plain --platform linux/arm64/v8,linux/amd64 --build-arg STACK_VERSION=$(STACK_VERSION) --build-arg VERSION=$(VERSION) --output type=oci,dest=$(OCI_OUTPUT) -t $(IMAGE_NAME):$(BUILD_TAG) .
+else
 ifeq ($(BUILDX),true)
 ifeq ($(STACK_VERSION),24)
 	docker buildx build --no-cache ${DOCKER_ARGS} --pull --progress plain --platform linux/arm64/v8,linux/amd64 --build-arg STACK_VERSION=$(STACK_VERSION) --build-arg VERSION=$(VERSION) -t $(IMAGE_NAME):$(BUILD_TAG)-$(STACK_VERSION) -t $(IMAGE_NAME):latest-$(STACK_VERSION) -t $(IMAGE_NAME):$(BUILD_TAG) -t $(IMAGE_NAME):latest .
@@ -66,6 +70,7 @@ else
 endif
 else
 	docker build --no-cache ${DOCKER_ARGS} --pull --progress plain --build-arg STACK_VERSION=$(STACK_VERSION) --build-arg VERSION=$(VERSION) -t $(IMAGE_NAME):$(BUILD_TAG)-$(STACK_VERSION) -t $(IMAGE_NAME):latest-$(STACK_VERSION) -t $(IMAGE_NAME):$(BUILD_TAG) .
+endif
 endif
 
 build/deb:
